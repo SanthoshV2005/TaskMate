@@ -1,141 +1,117 @@
-require('dotenv').config();
 const express = require('express');
+const mongoose = require('mongoose');
 const cors = require('cors');
-const connectDB = require('./config/db');
+const dotenv = require('dotenv');
 const authRoutes = require('./routes/authRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 
-// Initialize Express app
+dotenv.config();
+
 const app = express();
+
+// CORS Configuration - IMPORTANT FOR DEPLOYMENT
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:3000',
+    'https://taskmate-backend.onrender.com',
+    /\.vercel\.app$/,  // Allow all Vercel domains
+    /\.netlify\.app$/  // Allow all Netlify domains
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS configuration
-const corsOptions = {
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true,
-  optionsSuccessStatus: 200,
-};
-app.use(cors(corsOptions));
-
-// Connect to MongoDB
-(async () => {
-  try {
-    await connectDB();
-    console.log('✅ MongoDB connected successfully');
-  } catch (err) {
-    console.error('❌ MongoDB connection failed:', err.message);
-  }
-})();
-
-// Request logging middleware (development)
-if (process.env.NODE_ENV === 'development') {
-  app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-    next();
+// Health check endpoint for monitoring
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    message: 'Server is running',
+    timestamp: new Date().toISOString()
   });
-}
+});
+
+// Database Connection with retry logic
+const connectDB = async () => {
+  try {
+    const mongoURI = process.env.MONGODB_URI;
+    
+    if (!mongoURI) {
+      throw new Error('MONGODB_URI is not defined in environment variables');
+    }
+
+    await mongoose.connect(mongoURI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    });
+    
+    console.log('✅ MongoDB Connected Successfully');
+  } catch (err) {
+    console.error('❌ MongoDB Connection Error:', err.message);
+    console.error('Retrying connection in 5 seconds...');
+    setTimeout(connectDB, 5000);
+  }
+};
+
+connectDB();
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'TaskMate API is running',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-  });
-});
-
 // Root endpoint
 app.get('/', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Welcome to TaskMate API (Vercel Deployment)',
+  res.json({ 
+    message: 'TaskMate API is running',
     version: '1.0.0',
+    status: 'active',
     endpoints: {
-      auth: {
-        register: 'POST /api/auth/register',
-        login: 'POST /api/auth/login',
-        me: 'GET /api/auth/me',
-        update: 'PUT /api/auth/update',
-      },
-      tasks: {
-        getAll: 'GET /api/tasks',
-        stats: 'GET /api/tasks/stats',
-        getOne: 'GET /api/tasks/:id',
-        create: 'POST /api/tasks',
-        update: 'PUT /api/tasks/:id',
-        delete: 'DELETE /api/tasks/:id',
-      },
-    },
+      auth: '/api/auth',
+      tasks: '/api/tasks',
+      health: '/health'
+    }
   });
 });
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({
-    success: false,
+  res.status(404).json({ 
+    success: false, 
     message: 'Route not found',
+    path: req.path
   });
 });
 
-// Global error handler
+// Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
-
-  if (err.name === 'ValidationError') {
-    const errors = Object.values(err.errors).map(e => e.message);
-    return res.status(400).json({
-      success: false,
-      message: 'Validation Error',
-      errors,
-    });
-  }
-
-  if (err.code === 11000) {
-    return res.status(400).json({
-      success: false,
-      message: 'Duplicate field value entered',
-    });
-  }
-
-  if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Invalid token',
-    });
-  }
-
-  if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Token expired',
-    });
-  }
-
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+  console.error('Error:', err.stack);
+  res.status(err.status || 500).json({ 
+    success: false, 
+    message: err.message || 'Something went wrong!',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
 
-// 🚀 Export the Express app (no app.listen)
-module.exports = app;
-
-// Global error handlers
-process.on('unhandledRejection', (err) => {
-  console.error('❌ UNHANDLED REJECTION:', err.message);
-  console.error(err);
+// Handle MongoDB connection errors
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err);
 });
 
-process.on('uncaughtException', (err) => {
-  console.error('❌ UNCAUGHT EXCEPTION:', err.message);
-  console.error(err);
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected. Attempting to reconnect...');
+  connectDB();
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
