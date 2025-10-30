@@ -8,9 +8,6 @@ const taskRoutes = require('./routes/taskRoutes');
 // Initialize Express app
 const app = express();
 
-// Connect to MongoDB
-connectDB();
-
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -19,9 +16,19 @@ app.use(express.urlencoded({ extended: true }));
 const corsOptions = {
   origin: process.env.FRONTEND_URL || '*',
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
+
+// Connect to MongoDB
+(async () => {
+  try {
+    await connectDB();
+    console.log('✅ MongoDB connected successfully');
+  } catch (err) {
+    console.error('❌ MongoDB connection failed:', err.message);
+  }
+})();
 
 // Request logging middleware (development)
 if (process.env.NODE_ENV === 'development') {
@@ -41,7 +48,7 @@ app.get('/health', (req, res) => {
     success: true,
     message: 'TaskMate API is running',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
   });
 });
 
@@ -49,14 +56,14 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'Welcome to TaskMate API',
+    message: 'Welcome to TaskMate API (Vercel Deployment)',
     version: '1.0.0',
     endpoints: {
       auth: {
         register: 'POST /api/auth/register',
         login: 'POST /api/auth/login',
         me: 'GET /api/auth/me',
-        update: 'PUT /api/auth/update'
+        update: 'PUT /api/auth/update',
       },
       tasks: {
         getAll: 'GET /api/tasks',
@@ -64,9 +71,9 @@ app.get('/', (req, res) => {
         getOne: 'GET /api/tasks/:id',
         create: 'POST /api/tasks',
         update: 'PUT /api/tasks/:id',
-        delete: 'DELETE /api/tasks/:id'
-      }
-    }
+        delete: 'DELETE /api/tasks/:id',
+      },
+    },
   });
 });
 
@@ -74,84 +81,61 @@ app.get('/', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Route not found'
+    message: 'Route not found',
   });
 });
 
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  
-  // Mongoose validation error
+
   if (err.name === 'ValidationError') {
     const errors = Object.values(err.errors).map(e => e.message);
     return res.status(400).json({
       success: false,
       message: 'Validation Error',
-      errors
+      errors,
     });
   }
-  
-  // Mongoose duplicate key error
+
   if (err.code === 11000) {
     return res.status(400).json({
       success: false,
-      message: 'Duplicate field value entered'
+      message: 'Duplicate field value entered',
     });
   }
-  
-  // JWT errors
+
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({
       success: false,
-      message: 'Invalid token'
+      message: 'Invalid token',
     });
   }
-  
+
   if (err.name === 'TokenExpiredError') {
     return res.status(401).json({
       success: false,
-      message: 'Token expired'
+      message: 'Token expired',
     });
   }
-  
-  // Default error
+
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 });
 
-// Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`
-╔══════════════════════════════════════════════════╗
-║                                                  ║
-║   🚀 TaskMate API Server                         ║
-║                                                  ║
-║   📡 Server: http://localhost:${PORT}              ║
-║   🌍 Environment: ${process.env.NODE_ENV || 'development'}                   ║
-║   📅 Started: ${new Date().toLocaleString()}     ║
-║                                                  ║
-╚══════════════════════════════════════════════════╝
-  `);
-});
+// 🚀 Export the Express app (no app.listen)
+module.exports = app;
 
-// Handle unhandled promise rejections
+// Global error handlers
 process.on('unhandledRejection', (err) => {
   console.error('❌ UNHANDLED REJECTION:', err.message);
   console.error(err);
-  // Close server & exit process
-  process.exit(1);
 });
 
-// Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('❌ UNCAUGHT EXCEPTION:', err.message);
   console.error(err);
-  process.exit(1);
 });
-
-module.exports = app;
