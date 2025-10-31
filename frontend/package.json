@@ -1,0 +1,12 @@
+{
+  "name": "taskmate-frontend",
+  "version": "1.0.0",
+  "description": "TaskMate Frontend - Smart Task Management System",
+  "scripts": {
+    "build": "echo 'No build needed - static files'",
+    "start": "echo 'Static site - deploy directly'"
+  },
+  "keywords": ["taskmate", "task-management"],
+  "author": "SanthoshV2005",
+  "license": "MIT"
+}
