@@ -130,7 +130,8 @@ router.post('/login', async (req, res) => {
 // @access  Private
 router.get('/me', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId);
+    // FIXED: Use req.userId (consistent with taskRoutes.js)
+    const user = await User.findById(req.userId);
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -168,8 +169,9 @@ router.put('/update', auth, async (req, res) => {
     if (name) updates.name = name;
     if (email) updates.email = email;
 
+    // FIXED: Use req.userId (consistent with taskRoutes.js)
     const user = await User.findByIdAndUpdate(
-      req.user.userId,
+      req.userId,
       updates,
       { new: true, runValidators: true }
     );

@@ -1,221 +1,254 @@
-// ========================================
-// TASKMATE - AUTH.JS
-// Fixed Authentication with Better Error Handling
-// ========================================
-
+// API Configuration
 const API_BASE_URL = 'https://taskmate-backends.onrender.com/api';
 
 console.log('✅ Auth script loaded');
 console.log('📡 API URL:', API_BASE_URL);
 
-// ========================================
-// LOGIN FUNCTIONALITY
-// ========================================
-const loginForm = document.getElementById('loginForm');
-if (loginForm) {
-    console.log('✅ Login form found, attaching listener');
-    
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        console.log('🔐 Login form submitted');
-
-        const email = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value;
-        const errorDiv = document.getElementById('errorMessage');
-        const submitBtn = loginForm.querySelector('button[type="submit"]');
-
-        console.log('📧 Email:', email);
-
-        // Validation
-        if (!email || !password) {
-            showError('Please fill in all fields', errorDiv);
-            return;
-        }
-
-        // Disable button during submission
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Logging in...';
-
-        try {
-            console.log('📤 Making login request to:', `${API_BASE_URL}/auth/login`);
-
-            const response = await fetch(`${API_BASE_URL}/auth/login`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email, password })
-            });
-
-            console.log('📥 Response status:', response.status);
-            const data = await response.json();
-            console.log('📦 Response data:', data);
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Login failed');
-            }
-
-            if (data.success && data.token) {
-                console.log('✅ Login successful!');
-                
-                // Save user data with token
-                const userData = {
-                    token: data.token,
-                    email: data.user.email,
-                    name: data.user.name,
-                    id: data.user.id
-                };
-
-                console.log('💾 Saving user data:', userData);
-                localStorage.setItem('user', JSON.stringify(userData));
-                
-                // Verify it was saved
-                const saved = localStorage.getItem('user');
-                console.log('✅ User data saved successfully:', !!saved);
-
-                // Show success message
-                showSuccess('Login successful! Redirecting...', errorDiv);
-
-                // Redirect after short delay
-                setTimeout(() => {
-                    console.log('🔄 Redirecting to dashboard...');
-                    window.location.href = 'dashboard.html';
-                }, 1000);
-
-            } else {
-                throw new Error('Invalid response from server');
-            }
-
-        } catch (error) {
-            console.error('❌ Login error:', error);
-            showError(error.message || 'Login failed. Please try again.', errorDiv);
-        } finally {
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Login';
-        }
-    });
-}
-
-// ========================================
-// REGISTRATION FUNCTIONALITY
-// ========================================
-const registerForm = document.getElementById('registerForm');
-if (registerForm) {
-    console.log('✅ Register form found, attaching listener');
-    
-    registerForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        console.log('📝 Register form submitted');
-
-        const name = document.getElementById('name').value.trim();
-        const email = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value;
-        const confirmPassword = document.getElementById('confirmPassword').value;
-        const errorDiv = document.getElementById('errorMessage');
-        const submitBtn = registerForm.querySelector('button[type="submit"]');
-
-        // Validation
-        if (!name || !email || !password || !confirmPassword) {
-            showError('Please fill in all fields', errorDiv);
-            return;
-        }
-
-        if (password !== confirmPassword) {
-            showError('Passwords do not match', errorDiv);
-            return;
-        }
-
-        if (password.length < 6) {
-            showError('Password must be at least 6 characters', errorDiv);
-            return;
-        }
-
-        // Disable button during submission
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Creating Account...';
-
-        try {
-            console.log('📤 Making register request to:', `${API_BASE_URL}/auth/register`);
-
-            const response = await fetch(`${API_BASE_URL}/auth/register`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ name, email, password })
-            });
-
-            console.log('📥 Response status:', response.status);
-            const data = await response.json();
-            console.log('📦 Response data:', data);
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Registration failed');
-            }
-
-            if (data.success && data.token) {
-                console.log('✅ Registration successful!');
-                
-                // Save user data
-                const userData = {
-                    token: data.token,
-                    email: data.user.email,
-                    name: data.user.name,
-                    id: data.user.id
-                };
-
-                console.log('💾 Saving user data:', userData);
-                localStorage.setItem('user', JSON.stringify(userData));
-
-                // Show success message
-                showSuccess('Account created! Redirecting to dashboard...', errorDiv);
-
-                // Redirect after short delay
-                setTimeout(() => {
-                    console.log('🔄 Redirecting to dashboard...');
-                    window.location.href = 'dashboard.html';
-                }, 1000);
-
-            } else {
-                throw new Error('Invalid response from server');
-            }
-
-        } catch (error) {
-            console.error('❌ Registration error:', error);
-            showError(error.message || 'Registration failed. Please try again.', errorDiv);
-        } finally {
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Create Account';
-        }
-    });
-}
-
-// ========================================
-// HELPER FUNCTIONS
-// ========================================
-function showError(message, errorDiv) {
-    if (errorDiv) {
-        errorDiv.textContent = message;
-        errorDiv.className = 'alert alert-danger';
-        errorDiv.style.display = 'block';
+// Utility Functions
+function showMessage(message, type = 'error') {
+    const messageDiv = document.getElementById('message');
+    if (messageDiv) {
+        messageDiv.textContent = message;
+        messageDiv.className = `message ${type}`;
+        messageDiv.style.display = 'block';
         
-        // Auto-hide after 5 seconds
         setTimeout(() => {
-            errorDiv.style.display = 'none';
+            messageDiv.style.display = 'none';
         }, 5000);
     } else {
-        alert(message);
+        console.log(`${type.toUpperCase()}: ${message}`);
     }
 }
 
-function showSuccess(message, errorDiv) {
-    if (errorDiv) {
-        errorDiv.textContent = message;
-        errorDiv.className = 'alert alert-success';
-        errorDiv.style.display = 'block';
-    } else {
-        alert(message);
+function saveUserData(userData) {
+    try {
+        console.log('💾 Attempting to save user data:', userData);
+        
+        // Save as JSON string
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Verify it was saved
+        const saved = localStorage.getItem('user');
+        console.log('✅ User data saved successfully:', saved !== null);
+        
+        return saved !== null;
+    } catch (error) {
+        console.error('❌ Error saving user data:', error);
+        return false;
     }
 }
 
-console.log('✅ Auth script fully initialized');
+function getUserData() {
+    try {
+        const userData = localStorage.getItem('user');
+        console.log('📦 Raw user data from localStorage:', userData);
+        
+        if (!userData) {
+            console.log('⚠️ No user data found in localStorage');
+            return null;
+        }
+        
+        const parsed = JSON.parse(userData);
+        console.log('✅ Parsed user data:', parsed);
+        
+        return parsed;
+    } catch (error) {
+        console.error('❌ Error getting user data:', error);
+        return null;
+    }
+}
+
+function clearUserData() {
+    try {
+        localStorage.removeItem('user');
+        console.log('🗑️ User data cleared');
+        return true;
+    } catch (error) {
+        console.error('❌ Error clearing user data:', error);
+        return false;
+    }
+}
+
+// Login Handler
+async function handleLogin(event) {
+    event.preventDefault();
+    console.log('🔐 Login form submitted');
+    
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    
+    console.log('📧 Email:', email);
+    
+    if (!email || !password) {
+        showMessage('Please fill in all fields', 'error');
+        return;
+    }
+    
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    const originalText = submitButton.textContent;
+    submitButton.disabled = true;
+    submitButton.textContent = 'Logging in...';
+    
+    try {
+        const loginUrl = `${API_BASE_URL}/auth/login`;
+        console.log('📤 Making login request to:', loginUrl);
+        
+        const response = await fetch(loginUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password })
+        });
+        
+        console.log('📥 Response status:', response.status);
+        
+        const data = await response.json();
+        console.log('📦 Response data:', data);
+        
+        if (!response.ok) {
+            throw new Error(data.message || 'Login failed');
+        }
+        
+        if (data.success && data.token) {
+            console.log('✅ Login successful!');
+            
+            // Prepare user data
+            const userData = {
+                token: data.token,
+                email: data.user?.email || email,
+                name: data.user?.name || 'User',
+                id: data.user?._id || data.user?.id
+            };
+            
+            console.log('💾 Saving user data:', userData);
+            
+            // Save to localStorage
+            const saved = saveUserData(userData);
+            
+            if (saved) {
+                console.log('✅ User data saved successfully');
+                showMessage('Login successful! Redirecting...', 'success');
+                
+                // Small delay to ensure localStorage is written
+                setTimeout(() => {
+                    console.log('🔄 Redirecting to dashboard...');
+                    window.location.href = '/dashboard.html';
+                }, 500);
+            } else {
+                throw new Error('Failed to save user data');
+            }
+        } else {
+            throw new Error(data.message || 'Invalid response from server');
+        }
+        
+    } catch (error) {
+        console.error('❌ Login error:', error);
+        showMessage(error.message || 'Login failed. Please try again.', 'error');
+        submitButton.disabled = false;
+        submitButton.textContent = originalText;
+    }
+}
+
+// Register Handler
+async function handleRegister(event) {
+    event.preventDefault();
+    console.log('📝 Register form submitted');
+    
+    const name = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    
+    console.log('👤 Name:', name);
+    console.log('📧 Email:', email);
+    
+    // Validation
+    if (!name || !email || !password || !confirmPassword) {
+        showMessage('Please fill in all fields', 'error');
+        return;
+    }
+    
+    if (password !== confirmPassword) {
+        showMessage('Passwords do not match', 'error');
+        return;
+    }
+    
+    if (password.length < 6) {
+        showMessage('Password must be at least 6 characters', 'error');
+        return;
+    }
+    
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    const originalText = submitButton.textContent;
+    submitButton.disabled = true;
+    submitButton.textContent = 'Creating account...';
+    
+    try {
+        const registerUrl = `${API_BASE_URL}/auth/register`;
+        console.log('📤 Making register request to:', registerUrl);
+        
+        const response = await fetch(registerUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name, email, password })
+        });
+        
+        console.log('📥 Response status:', response.status);
+        
+        const data = await response.json();
+        console.log('📦 Response data:', data);
+        
+        if (!response.ok) {
+            throw new Error(data.message || 'Registration failed');
+        }
+        
+        if (data.success) {
+            console.log('✅ Registration successful!');
+            showMessage('Registration successful! Redirecting to login...', 'success');
+            
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 1500);
+        } else {
+            throw new Error(data.message || 'Registration failed');
+        }
+        
+    } catch (error) {
+        console.error('❌ Registration error:', error);
+        showMessage(error.message || 'Registration failed. Please try again.', 'error');
+        submitButton.disabled = false;
+        submitButton.textContent = originalText;
+    }
+}
+
+// Initialize forms when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('✅ DOM Content Loaded');
+    
+    // Check for login form
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        console.log('✅ Login form found, attaching listener');
+        loginForm.addEventListener('submit', handleLogin);
+    }
+    
+    // Check for register form
+    const registerForm = document.getElementById('registerForm');
+    if (registerForm) {
+        console.log('✅ Register form found, attaching listener');
+        registerForm.addEventListener('submit', handleRegister);
+    }
+    
+    // Check if user is already logged in
+    const currentPage = window.location.pathname;
+    if (currentPage.includes('login.html') || currentPage.includes('register.html')) {
+        const userData = getUserData();
+        if (userData && userData.token) {
+            console.log('✅ User already logged in, redirecting to dashboard');
+            window.location.href = '/dashboard.html';
+        }
+    }
+});
