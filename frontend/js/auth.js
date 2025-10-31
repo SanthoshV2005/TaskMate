@@ -1,11 +1,11 @@
-// ========================================
+
 // Configuration
-// ========================================
+
 const API_URL = 'https://taskmate-backends.onrender.com/api';
 
-// ========================================
+
 // Registration Handler
-// ========================================
+
 document.addEventListener('DOMContentLoaded', () => {
     const registerForm = document.getElementById('registerForm');
     const loginForm = document.getElementById('loginForm');
@@ -151,9 +151,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// ========================================
+
 // Utility Functions
-// ========================================
+
 function showError(message) {
     const existingAlert = document.querySelector('.alert-danger');
     if (existingAlert) {
@@ -193,9 +193,9 @@ function clearErrors() {
     alerts.forEach(alert => alert.remove());
 }
 
-// ========================================
+
 // Check Authentication Status
-// ========================================
+
 function isAuthenticated() {
     return localStorage.getItem('token') !== null;
 }
