@@ -1,293 +1,394 @@
+// ========================================
+// TASKMATE - DASHBOARD.JS
+// Complete Working Version with Automation
+// ========================================
+
 // API Configuration
 const API_BASE_URL = 'https://taskmate-backends.onrender.com/api';
 
 console.log('✅ Dashboard script loaded');
 console.log('📡 API URL:', API_BASE_URL);
 
-// Get user data from localStorage
-function getUserData() {
-    try {
-        const userData = localStorage.getItem('user');
-        console.log('📦 Raw user data from localStorage:', userData);
-        
-        if (!userData) {
-            console.log('⚠️ No user data found');
-            return null;
-        }
-        
-        const parsed = JSON.parse(userData);
-        console.log('✅ Parsed user data:', parsed);
-        
-        return parsed;
-    } catch (error) {
-        console.error('❌ Error parsing user data:', error);
-        return null;
-    }
+// Check if user is logged in
+let user = JSON.parse(localStorage.getItem('user'));
+if (!user || !user.token) {
+    console.log('❌ No user found, redirecting to login...');
+    window.location.href = 'login.html';
 }
 
-// Check authentication
-function checkAuth() {
-    console.log('🔐 Checking authentication...');
-    
-    const userData = getUserData();
-    
-    if (!userData || !userData.token) {
-        console.log('❌ No valid authentication found');
-        alert('Please login first!');
-        window.location.href = '/login.html';
-        return null;
-    }
-    
-    console.log('✅ User authenticated:', userData.name);
-    return userData;
-}
+console.log('✅ Dashboard Loaded');
+console.log('👤 User:', user.name);
 
-// Logout function
-function logout() {
-    console.log('👋 Logging out...');
-    localStorage.removeItem('user');
-    window.location.href = '/login.html';
-}
+// Global variables
+let tasks = [];
+let taskModal;
+let currentEditingTaskId = null;
 
-// Show message to user
-function showMessage(message, type = 'error') {
-    const messageDiv = document.getElementById('message');
-    if (messageDiv) {
-        messageDiv.textContent = message;
-        messageDiv.className = `message ${type}`;
-        messageDiv.style.display = 'block';
-        
-        setTimeout(() => {
-            messageDiv.style.display = 'none';
-        }, 5000);
-    } else {
-        console.log(`${type.toUpperCase()}: ${message}`);
-    }
-}
-
-// Load tasks from API
-async function loadTasks() {
-    console.log('📥 Loading tasks...');
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🎯 DOM Content Loaded');
     
-    const userData = getUserData();
-    if (!userData || !userData.token) {
-        console.log('❌ No auth token found');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_BASE_URL}/tasks`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${userData.token}`,
-                'Content-Type': 'application/json'
-            }
+    // Initialize Bootstrap Modal
+    const modalElement = document.getElementById('taskModal');
+    if (modalElement) {
+        taskModal = new bootstrap.Modal(modalElement, {
+            backdrop: true,
+            keyboard: true,
+            focus: true
         });
-        
-        console.log('📊 Tasks response status:', response.status);
-        
-        if (!response.ok) {
-            if (response.status === 401) {
-                console.log('❌ Unauthorized - redirecting to login');
-                logout();
-                return;
+        console.log('✅ Modal initialized');
+    }
+    
+    // Set user name in navbar
+    const userNameElement = document.getElementById('userName');
+    if (userNameElement) {
+        userNameElement.textContent = user.name;
+    }
+    
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Load tasks
+    loadTasks();
+    
+    // Check for automated tasks on load
+    checkAutomatedTasks();
+});
+
+// Setup all event listeners
+function setupEventListeners() {
+    console.log('🔌 Setting up event listeners...');
+    
+    // Add Task Button
+    const addTaskBtn = document.getElementById('addTaskBtn');
+    if (addTaskBtn) {
+        addTaskBtn.onclick = openAddTaskModal;
+        console.log('✅ Add Task button listener attached');
+    }
+    
+    // Save Task Button
+    const saveTaskBtn = document.getElementById('saveTaskBtn');
+    if (saveTaskBtn) {
+        saveTaskBtn.onclick = saveTask;
+        console.log('✅ Save Task button listener attached');
+    }
+    
+    // Logout Button
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.onclick = logout;
+        console.log('✅ Logout button listener attached');
+    }
+    
+    // View Automations Button
+    const viewAutomationsBtn = document.getElementById('viewAutomationsBtn');
+    if (viewAutomationsBtn) {
+        viewAutomationsBtn.onclick = function(e) {
+            e.preventDefault();
+            showAutomationRules();
+        };
+        console.log('✅ View Automations button listener attached');
+    }
+    
+    // Clear Automations Button
+    const clearAutomationsBtn = document.getElementById('clearAutomationsBtn');
+    if (clearAutomationsBtn) {
+        clearAutomationsBtn.onclick = function(e) {
+            e.preventDefault();
+            clearAutomationRules();
+        };
+        console.log('✅ Clear Automations button listener attached');
+    }
+    
+    // Recurring Task Checkbox
+    const recurringCheckbox = document.getElementById('isRecurring');
+    if (recurringCheckbox) {
+        recurringCheckbox.onchange = function() {
+            const frequencyGroup = document.getElementById('frequencyGroup');
+            if (frequencyGroup) {
+                frequencyGroup.style.display = this.checked ? 'block' : 'none';
             }
-            throw new Error('Failed to load tasks');
-        }
-        
-        const data = await response.json();
-        console.log('✅ Tasks loaded:', data);
-        
-        if (data.success && Array.isArray(data.tasks)) {
-            displayTasks(data.tasks);
-        } else {
-            console.log('⚠️ No tasks found or invalid response');
-            displayTasks([]);
-        }
-        
-    } catch (error) {
-        console.error('❌ Error loading tasks:', error);
-        showMessage('Failed to load tasks', 'error');
+        };
+        console.log('✅ Recurring checkbox listener attached');
+    }
+    
+    // Filter Buttons
+    const filterButtons = document.querySelectorAll('[data-filter]');
+    filterButtons.forEach(btn => {
+        btn.onclick = function() {
+            const filter = this.getAttribute('data-filter');
+            filterTasks(filter);
+            
+            // Update active state
+            filterButtons.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+        };
+    });
+    console.log('✅ Filter buttons listener attached');
+    
+    // Search Input
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.oninput = function() {
+            searchTasks(this.value);
+        };
+        console.log('✅ Search input listener attached');
     }
 }
 
-// Display tasks in the UI
-function displayTasks(tasks) {
-    console.log('🎨 Displaying tasks:', tasks.length);
+// Open Add Task Modal
+function openAddTaskModal() {
+    console.log('Opening add task modal...');
+    currentEditingTaskId = null;
     
-    const taskList = document.getElementById('taskList');
-    if (!taskList) {
-        console.log('❌ Task list element not found');
-        return;
-    }
+    // Clear form
+    document.getElementById('taskForm').reset();
+    document.getElementById('frequencyGroup').style.display = 'none';
+    document.getElementById('modalTitle').textContent = 'Add New Task';
     
-    if (tasks.length === 0) {
-        taskList.innerHTML = '<p class="no-tasks">No tasks yet. Create your first task!</p>';
-        return;
-    }
-    
-    taskList.innerHTML = tasks.map(task => {
-        const dueDate = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No due date';
-        const priorityClass = task.priority ? task.priority.toLowerCase() : 'low';
-        const statusClass = task.status === 'completed' ? 'completed' : '';
-        const recurringBadge = task.isRecurring ? '<span class="recurring-badge">🔁 Recurring</span>' : '';
+    // Show modal
+    if (taskModal) {
+        taskModal.show();
+        console.log('Modal opened');
         
-        return `
-            <div class="task-card ${statusClass}" data-task-id="${task._id}">
-                <div class="task-header">
-                    <h3>${escapeHtml(task.title)}</h3>
-                    <span class="priority-badge ${priorityClass}">${task.priority || 'Low'}</span>
-                </div>
-                <p class="task-description">${escapeHtml(task.description || 'No description')}</p>
-                <div class="task-meta">
-                    <span>📅 ${dueDate}</span>
-                    <span>📊 ${task.status || 'pending'}</span>
-                    ${recurringBadge}
-                </div>
-                <div class="task-actions">
-                    <button onclick="toggleTaskStatus('${task._id}')" class="btn-complete">
-                        ${task.status === 'completed' ? '↩️ Undo' : '✓ Complete'}
-                    </button>
-                    <button onclick="deleteTask('${task._id}')" class="btn-delete">🗑️ Delete</button>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-// Escape HTML to prevent XSS
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// Create new task
-async function createTask(event) {
-    event.preventDefault();
-    console.log('➕ Creating new task...');
-    
-    const userData = getUserData();
-    if (!userData || !userData.token) {
-        console.log('❌ No auth token');
-        return;
+        // Focus first input
+        setTimeout(() => {
+            const titleInput = document.getElementById('taskTitle');
+            if (titleInput) titleInput.focus();
+        }, 500);
     }
+}
+
+// Save Task (Create or Update)
+async function saveTask(e) {
+    if (e) e.preventDefault();
     
+    console.log('💾 Saving task...');
+    
+    // Get form values
     const title = document.getElementById('taskTitle').value.trim();
     const description = document.getElementById('taskDescription').value.trim();
-    const dueDate = document.getElementById('taskDueDate').value;
     const priority = document.getElementById('taskPriority').value;
-    const isRecurring = document.getElementById('taskRecurring').checked;
+    const status = document.getElementById('taskStatus').value;
+    const dueDate = document.getElementById('taskDueDate').value;
+    const isRecurring = document.getElementById('isRecurring').checked;
+    const frequency = document.getElementById('recurringFrequency').value;
     
+    // Validation
     if (!title) {
-        showMessage('Please enter a task title', 'error');
+        alert('❌ Please enter a task title');
         return;
     }
     
+    // Prepare task data
     const taskData = {
         title,
         description,
-        dueDate: dueDate || null,
         priority,
+        status,
+        dueDate: dueDate || null,
         isRecurring,
-        status: 'pending'
+        frequency: isRecurring ? frequency : null
     };
     
-    console.log('📤 Task data:', taskData);
+    console.log('Task data:', taskData);
     
     try {
-        const response = await fetch(`${API_BASE_URL}/tasks`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${userData.token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(taskData)
-        });
+        let response;
         
-        console.log('📊 Create response status:', response.status);
+        if (currentEditingTaskId) {
+            // Update existing task
+            console.log('Updating task:', currentEditingTaskId);
+            response = await fetch(`${API_BASE_URL}/tasks/${currentEditingTaskId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${user.token}`
+                },
+                body: JSON.stringify(taskData)
+            });
+        } else {
+            // Create new task
+            console.log('Creating new task');
+            response = await fetch(`${API_BASE_URL}/tasks`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${user.token}`
+                },
+                body: JSON.stringify(taskData)
+            });
+        }
         
-        if (!response.ok) {
-            if (response.status === 401) {
-                logout();
-                return;
+        console.log('Response status:', response.status);
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('✅ Task saved:', result);
+            
+            // If recurring, save automation rule
+            if (isRecurring && !currentEditingTaskId) {
+                saveAutomationRule(result.task);
             }
-            throw new Error('Failed to create task');
+            
+            // Close modal
+            if (taskModal) taskModal.hide();
+            
+            // Show success message
+            const message = currentEditingTaskId 
+                ? '✅ Task updated successfully!' 
+                : `✅ Task created successfully! ${isRecurring ? '🤖 Automation enabled!' : ''}`;
+            alert(message);
+            
+            // Reload tasks
+            await loadTasks();
+        } else {
+            const error = await response.json();
+            console.error('❌ Error saving task:', error);
+            alert(`❌ Failed to save task: ${error.message || 'Unknown error'}`);
         }
-        
-        const data = await response.json();
-        console.log('✅ Task created:', data);
-        
-        showMessage('Task created successfully!', 'success');
-        
-        // Reset form
-        event.target.reset();
-        
-        // Reload tasks
-        await loadTasks();
-        
-        // Close modal if exists
-        const modal = document.getElementById('taskModal');
-        if (modal) {
-            modal.style.display = 'none';
-        }
-        
     } catch (error) {
-        console.error('❌ Error creating task:', error);
-        showMessage('Failed to create task', 'error');
+        console.error('❌ Error:', error);
+        alert('❌ Failed to save task. Please try again.');
     }
 }
 
-// Toggle task status (complete/pending)
-async function toggleTaskStatus(taskId) {
-    console.log('🔄 Toggling task status:', taskId);
+// Load Tasks from API
+async function loadTasks() {
+    console.log('📥 Loading tasks...');
     
-    const userData = getUserData();
-    if (!userData || !userData.token) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/tasks`, {
+            headers: {
+                'Authorization': `Bearer ${user.token}`
+            }
+        });
+        
+        console.log('Response status:', response.status);
+        
+        if (response.ok) {
+            const data = await response.json();
+            tasks = data.tasks || [];
+            console.log(`✅ Loaded ${tasks.length} tasks`);
+            displayTasks(tasks);
+        } else {
+            console.error('❌ Failed to load tasks');
+            alert('❌ Failed to load tasks');
+        }
+    } catch (error) {
+        console.error('❌ Error loading tasks:', error);
+        alert('❌ Failed to load tasks. Please refresh the page.');
+    }
+}
+
+// Display Tasks in Kanban Board
+function displayTasks(tasksToDisplay) {
+    console.log('🎨 Displaying tasks:', tasksToDisplay.length);
+    
+    // Clear all columns
+    const todoColumn = document.getElementById('todoColumn');
+    const inProgressColumn = document.getElementById('inProgressColumn');
+    const completedColumn = document.getElementById('completedColumn');
+    
+    if (todoColumn) todoColumn.innerHTML = '';
+    if (inProgressColumn) inProgressColumn.innerHTML = '';
+    if (completedColumn) completedColumn.innerHTML = '';
+    
+    // Distribute tasks to columns
+    tasksToDisplay.forEach(task => {
+        const taskCard = createTaskCard(task);
+        
+        if (task.status === 'todo' && todoColumn) {
+            todoColumn.appendChild(taskCard);
+        } else if (task.status === 'in-progress' && inProgressColumn) {
+            inProgressColumn.appendChild(taskCard);
+        } else if (task.status === 'completed' && completedColumn) {
+            completedColumn.appendChild(taskCard);
+        }
+    });
+    
+    // Show message if no tasks
+    if (tasksToDisplay.length === 0) {
+        if (todoColumn) {
+            todoColumn.innerHTML = '<p class="text-muted text-center">No tasks yet. Create your first task!</p>';
+        }
+    }
+}
+
+// Create Task Card Element
+function createTaskCard(task) {
+    const card = document.createElement('div');
+    card.className = 'task-card';
+    card.setAttribute('data-task-id', task._id);
+    
+    // Priority badge color
+    const priorityColors = {
+        'low': 'success',
+        'medium': 'warning',
+        'high': 'danger'
+    };
+    
+    // Format due date
+    const dueDate = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No due date';
+    
+    // Automation badge
+    const automationBadge = task.isRecurring 
+        ? '<span class="badge bg-info ms-2" title="Automated Task">🔄</span>' 
+        : '';
+    
+    card.innerHTML = `
+        <div class="d-flex justify-content-between align-items-start mb-2">
+            <h6 class="mb-0">${task.title} ${automationBadge}</h6>
+            <span class="badge bg-${priorityColors[task.priority]}">${task.priority}</span>
+        </div>
+        <p class="task-description text-muted small mb-2">${task.description || 'No description'}</p>
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted">📅 ${dueDate}</small>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-primary btn-sm" onclick="editTask('${task._id}')" title="Edit">
+                    ✏️
+                </button>
+                <button class="btn btn-outline-danger btn-sm" onclick="deleteTask('${task._id}')" title="Delete">
+                    🗑️
+                </button>
+            </div>
+        </div>
+    `;
+    
+    return card;
+}
+
+// Edit Task
+async function editTask(taskId) {
+    console.log('✏️ Editing task:', taskId);
+    currentEditingTaskId = taskId;
+    
+    const task = tasks.find(t => t._id === taskId);
+    if (!task) {
+        alert('❌ Task not found');
         return;
     }
     
-    try {
-        // First get the current task to know its status
-        const response = await fetch(`${API_BASE_URL}/tasks`, {
-            headers: {
-                'Authorization': `Bearer ${userData.token}`
-            }
-        });
-        
-        const data = await response.json();
-        const task = data.tasks.find(t => t._id === taskId);
-        
-        if (!task) {
-            throw new Error('Task not found');
-        }
-        
-        const newStatus = task.status === 'completed' ? 'pending' : 'completed';
-        
-        const updateResponse = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${userData.token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ status: newStatus })
-        });
-        
-        if (!updateResponse.ok) {
-            throw new Error('Failed to update task');
-        }
-        
-        console.log('✅ Task status updated');
-        showMessage('Task updated successfully!', 'success');
-        await loadTasks();
-        
-    } catch (error) {
-        console.error('❌ Error updating task:', error);
-        showMessage('Failed to update task', 'error');
-    }
+    // Fill form with task data
+    document.getElementById('taskTitle').value = task.title;
+    document.getElementById('taskDescription').value = task.description || '';
+    document.getElementById('taskPriority').value = task.priority;
+    document.getElementById('taskStatus').value = task.status;
+    document.getElementById('taskDueDate').value = task.dueDate ? task.dueDate.split('T')[0] : '';
+    document.getElementById('isRecurring').checked = task.isRecurring || false;
+    document.getElementById('recurringFrequency').value = task.frequency || 'daily';
+    
+    // Show/hide frequency group
+    document.getElementById('frequencyGroup').style.display = task.isRecurring ? 'block' : 'none';
+    
+    // Update modal title
+    document.getElementById('modalTitle').textContent = 'Edit Task';
+    
+    // Show modal
+    if (taskModal) taskModal.show();
 }
 
-// Delete task
+// Delete Task
 async function deleteTask(taskId) {
     console.log('🗑️ Deleting task:', taskId);
     
@@ -295,97 +396,210 @@ async function deleteTask(taskId) {
         return;
     }
     
-    const userData = getUserData();
-    if (!userData || !userData.token) {
-        return;
-    }
-    
     try {
         const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
             method: 'DELETE',
             headers: {
-                'Authorization': `Bearer ${userData.token}`,
-                'Content-Type': 'application/json'
+                'Authorization': `Bearer ${user.token}`
             }
         });
         
-        if (!response.ok) {
-            throw new Error('Failed to delete task');
+        if (response.ok) {
+            console.log('✅ Task deleted');
+            alert('✅ Task deleted successfully');
+            await loadTasks();
+        } else {
+            console.error('❌ Failed to delete task');
+            alert('❌ Failed to delete task');
         }
-        
-        console.log('✅ Task deleted');
-        showMessage('Task deleted successfully!', 'success');
-        await loadTasks();
-        
     } catch (error) {
-        console.error('❌ Error deleting task:', error);
-        showMessage('Failed to delete task', 'error');
+        console.error('❌ Error:', error);
+        alert('❌ Failed to delete task');
     }
 }
 
-// Modal functions
-function openTaskModal() {
-    const modal = document.getElementById('taskModal');
-    if (modal) {
-        modal.style.display = 'flex';
-    }
-}
-
-function closeTaskModal() {
-    const modal = document.getElementById('taskModal');
-    if (modal) {
-        modal.style.display = 'none';
-        const form = document.getElementById('taskForm');
-        if (form) {
-            form.reset();
-        }
-    }
-}
-
-// Make functions globally available
-window.logout = logout;
-window.toggleTaskStatus = toggleTaskStatus;
-window.deleteTask = deleteTask;
-window.openTaskModal = openTaskModal;
-window.closeTaskModal = closeTaskModal;
-
-// Initialize dashboard
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('✅ DOM Content Loaded');
+// Filter Tasks
+function filterTasks(filter) {
+    console.log('🔍 Filtering tasks:', filter);
     
-    // Check authentication
-    const userData = checkAuth();
-    if (!userData) {
+    if (filter === 'all') {
+        displayTasks(tasks);
+    } else {
+        const filtered = tasks.filter(task => {
+            if (filter === 'today') {
+                const today = new Date().toDateString();
+                const taskDate = task.dueDate ? new Date(task.dueDate).toDateString() : null;
+                return taskDate === today;
+            } else if (filter === 'overdue') {
+                const now = new Date();
+                const taskDate = task.dueDate ? new Date(task.dueDate) : null;
+                return taskDate && taskDate < now && task.status !== 'completed';
+            } else {
+                return task.priority === filter;
+            }
+        });
+        displayTasks(filtered);
+    }
+}
+
+// Search Tasks
+function searchTasks(query) {
+    console.log('🔎 Searching tasks:', query);
+    
+    if (!query.trim()) {
+        displayTasks(tasks);
         return;
     }
     
-    // Display user name
-    const userNameElement = document.getElementById('userName');
-    if (userNameElement) {
-        userNameElement.textContent = userData.name;
+    const filtered = tasks.filter(task => 
+        task.title.toLowerCase().includes(query.toLowerCase()) ||
+        (task.description && task.description.toLowerCase().includes(query.toLowerCase()))
+    );
+    
+    displayTasks(filtered);
+}
+
+// ========================================
+// AUTOMATION FEATURES
+// ========================================
+
+// Save Automation Rule
+function saveAutomationRule(task) {
+    console.log('🤖 Saving automation rule for task:', task.title);
+    
+    const rules = JSON.parse(localStorage.getItem('automationRules') || '[]');
+    
+    const rule = {
+        id: task._id,
+        title: task.title,
+        description: task.description,
+        priority: task.priority,
+        frequency: task.frequency,
+        lastCreated: new Date().toISOString()
+    };
+    
+    rules.push(rule);
+    localStorage.setItem('automationRules', JSON.stringify(rules));
+    
+    console.log('✅ Automation rule saved');
+}
+
+// Check and Create Automated Tasks
+async function checkAutomatedTasks() {
+    console.log('🤖 Checking for automated tasks...');
+    
+    const rules = JSON.parse(localStorage.getItem('automationRules') || '[]');
+    
+    if (rules.length === 0) {
+        console.log('No automation rules found');
+        return;
     }
     
-    // Load tasks
-    loadTasks();
+    const now = new Date();
     
-    // Attach event listeners
-    const taskForm = document.getElementById('taskForm');
-    if (taskForm) {
-        taskForm.addEventListener('submit', createTask);
-    }
-    
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', logout);
-    }
-    
-    // Close modal when clicking outside
-    const modal = document.getElementById('taskModal');
-    if (modal) {
-        window.onclick = function(event) {
-            if (event.target === modal) {
-                closeTaskModal();
+    for (const rule of rules) {
+        const lastCreated = new Date(rule.lastCreated);
+        const daysSinceCreated = (now - lastCreated) / (1000 * 60 * 60 * 24);
+        
+        let shouldCreate = false;
+        
+        // Check frequency
+        if (rule.frequency === 'daily' && daysSinceCreated >= 1) {
+            shouldCreate = true;
+        } else if (rule.frequency === 'weekly' && daysSinceCreated >= 7) {
+            shouldCreate = true;
+        } else if (rule.frequency === 'monthly' && daysSinceCreated >= 30) {
+            shouldCreate = true;
+        }
+        
+        if (shouldCreate) {
+            console.log('🤖 Creating automated task:', rule.title);
+            
+            // Create new task
+            const taskData = {
+                title: `${rule.title} 🔄`,
+                description: rule.description,
+                priority: rule.priority,
+                status: 'todo',
+                dueDate: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+                isRecurring: true,
+                frequency: rule.frequency
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/tasks`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${user.token}`
+                    },
+                    body: JSON.stringify(taskData)
+                });
+                
+                if (response.ok) {
+                    console.log('✅ Automated task created');
+                    
+                    // Update last created time
+                    rule.lastCreated = now.toISOString();
+                    localStorage.setItem('automationRules', JSON.stringify(rules));
+                    
+                    // Show notification
+                    alert(`🤖 Automated task created: ${rule.title} 🔄`);
+                    
+                    // Reload tasks
+                    await loadTasks();
+                }
+            } catch (error) {
+                console.error('❌ Error creating automated task:', error);
             }
-        };
+        }
     }
-});
+}
+
+// Show Automation Rules
+function showAutomationRules() {
+    console.log('Showing automation rules...');
+    
+    const rules = JSON.parse(localStorage.getItem('automationRules') || '[]');
+    
+    if (rules.length === 0) {
+        alert('🤖 No Automation Rules Active\n\nCreate a recurring task to set up automation!');
+        return;
+    }
+    
+    let message = '🤖 Active Automation Rules:\n\n';
+    
+    rules.forEach((rule, index) => {
+        const lastCreated = new Date(rule.lastCreated).toLocaleDateString();
+        message += `${index + 1}. ${rule.title}\n`;
+        message += `   Frequency: ${rule.frequency}\n`;
+        message += `   Last Created: ${lastCreated}\n\n`;
+    });
+    
+    alert(message);
+}
+
+// Clear Automation Rules
+function clearAutomationRules() {
+    console.log('Clearing automation rules...');
+    
+    if (confirm('⚠️ Are you sure you want to clear all automation rules?\n\nThis will not delete existing tasks, but will stop creating new automated tasks.')) {
+        localStorage.removeItem('automationRules');
+        alert('✅ Automation rules cleared!');
+        console.log('✅ Automation rules cleared');
+    }
+}
+
+// Logout
+function logout() {
+    console.log('👋 Logging out...');
+    
+    if (confirm('Are you sure you want to logout?')) {
+        localStorage.removeItem('user');
+        window.location.href = 'login.html';
+    }
+}
+
+// Make functions globally accessible
+window.editTask = editTask;
+window.deleteTask = deleteTask;
