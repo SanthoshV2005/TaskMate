@@ -404,48 +404,285 @@ function displayTasks(tasksToDisplay) {
     }
 }
 
-// Create Task Card Element
+// ========================================
+// ADD THESE FUNCTIONS TO YOUR EXISTING dashboard.js
+// ========================================
+
+// REPLACE your existing createTaskCard function with this one:
 function createTaskCard(task) {
     const card = document.createElement('div');
-    card.className = 'task-card';
-    card.setAttribute('data-task-id', task._id);
-    
-    // Priority badge color
-    const priorityColors = {
-        'low': 'success',
-        'medium': 'warning',
-        'high': 'danger'
-    };
+    card.className = 'task-card fade-in';
+    card.dataset.taskId = task._id;
     
     // Format due date
-    const dueDate = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No due date';
+    const dueDate = new Date(task.dueDate);
+    const formattedDate = dueDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+    });
     
-    // Automation badge
-    const automationBadge = task.isRecurring 
-        ? '<span class="badge bg-info ms-2" title="Automated Task">🔄</span>' 
-        : '';
+    // Check if overdue
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isOverdue = dueDate < today && task.status !== 'completed';
+    
+    // Check if automated
+    const isAutomated = task.isRecurring === true;
+    const frequency = task.recurringFrequency || 'daily';
+    
+    // Create automation badge if automated
+    const automationBadge = isAutomated ? `
+        <span class="badge bg-info text-white ms-2" title="This task repeats ${frequency}">
+            <i class="fas fa-robot"></i> ${frequency}
+        </span>
+    ` : '';
+    
+    // Priority badge colors
+    const priorityClass = task.priority === 'high' ? 'bg-danger' : 
+                         task.priority === 'medium' ? 'bg-warning' : 'bg-info';
     
     card.innerHTML = `
-        <div class="d-flex justify-content-between align-items-start mb-2">
-            <h6 class="mb-0">${task.title} ${automationBadge}</h6>
-            <span class="badge bg-${priorityColors[task.priority]}">${task.priority}</span>
-        </div>
-        <p class="task-description text-muted small mb-2">${task.description || 'No description'}</p>
-        <div class="d-flex justify-content-between align-items-center">
-            <small class="text-muted">📅 ${dueDate}</small>
-            <div class="btn-group btn-group-sm">
-                <button class="btn btn-outline-primary btn-sm" onclick="editTask('${task._id}')" title="Edit">
-                    ✏️
-                </button>
-                <button class="btn btn-outline-danger btn-sm" onclick="deleteTask('${task._id}')" title="Delete">
-                    🗑️
-                </button>
+        <div class="task-card-header">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <h6 class="task-title mb-0">${escapeHtml(task.title)}</h6>
+                ${automationBadge}
             </div>
+        </div>
+        <p class="task-description">${escapeHtml(task.description || 'No description')}</p>
+        <div class="task-meta">
+            <span class="badge ${priorityClass} text-white">
+                <i class="fas fa-flag"></i> ${capitalizeFirst(task.priority)}
+            </span>
+            <span class="badge ${isOverdue ? 'bg-danger text-white' : 'bg-light text-dark'}">
+                <i class="fas fa-calendar"></i> ${formattedDate}
+            </span>
+        </div>
+        <div class="task-actions mt-3">
+            <button class="btn btn-sm btn-outline-primary" onclick="openEditTaskModal('${task._id}')">
+                <i class="fas fa-edit"></i> Edit
+            </button>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteTask('${task._id}')">
+                <i class="fas fa-trash"></i> Delete
+            </button>
         </div>
     `;
     
+    // Add special styling for automated tasks
+    if (isAutomated) {
+        card.style.borderLeft = '4px solid #0dcaf0';
+        card.style.background = 'linear-gradient(to right, rgba(13, 202, 240, 0.05), white)';
+    }
+    
     return card;
 }
+
+// Helper function to capitalize first letter
+function capitalizeFirst(str) {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+// Helper function to escape HTML (prevent XSS)
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.toString().replace(/[&<>"']/g, m => map[m]);
+}
+
+// REPLACE your showAutomationRules function with this:
+function showAutomationRules() {
+    console.log('🤖 Showing automation rules');
+    
+    // Filter tasks that have automation enabled
+    const automatedTasks = allTasks.filter(task => task.isRecurring === true);
+    
+    console.log('Found automated tasks:', automatedTasks.length);
+    
+    if (automatedTasks.length === 0) {
+        alert('❌ No automated tasks found!\n\n' +
+              'To create an automated task:\n' +
+              '1. Click "Add New Task"\n' +
+              '2. Fill in task details\n' +
+              '3. Check "🔄 Make this a recurring task"\n' +
+              '4. Select frequency (daily/weekly/monthly)\n' +
+              '5. Save the task\n\n' +
+              'The task will then automatically repeat based on the schedule you set.');
+        return;
+    }
+    
+    // Build detailed message
+    let message = '🤖 AUTOMATED TASKS\n';
+    message += '═'.repeat(60) + '\n\n';
+    
+    automatedTasks.forEach((task, index) => {
+        const dueDate = new Date(task.dueDate).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+        
+        message += `${index + 1}. ${task.title}\n`;
+        message += `   📊 Status: ${capitalizeFirst(task.status.replace('-', ' '))}\n`;
+        message += `   🔄 Frequency: ${capitalizeFirst(task.recurringFrequency || 'daily')}\n`;
+        message += `   📅 Due: ${dueDate}\n`;
+        message += `   🎯 Priority: ${capitalizeFirst(task.priority)}\n`;
+        message += `   📝 ${task.description ? task.description.substring(0, 50) + '...' : 'No description'}\n`;
+        message += '\n';
+    });
+    
+    message += '═'.repeat(60) + '\n';
+    message += `Total automated tasks: ${automatedTasks.length}\n\n`;
+    message += '💡 TIP: Automated tasks have a blue border and 🤖 badge';
+    
+    alert(message);
+}
+
+// ADD this function to filter only automated tasks
+function showOnlyAutomatedTasks() {
+    console.log('🔍 Filtering to show only automated tasks');
+    
+    const automatedTasks = allTasks.filter(task => task.isRecurring === true);
+    
+    if (automatedTasks.length === 0) {
+        // Show empty state in all columns
+        ['todoColumn', 'inProgressColumn', 'completedColumn'].forEach(columnId => {
+            const column = document.getElementById(columnId);
+            if (column) {
+                column.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-robot" style="font-size: 3rem; opacity: 0.3; margin-bottom: 1rem;"></i>
+                        <p>No automated tasks</p>
+                        <small>Create a recurring task to see it here</small>
+                    </div>
+                `;
+            }
+        });
+        return;
+    }
+    
+    // Separate automated tasks by status
+    const todo = automatedTasks.filter(t => t.status === 'todo');
+    const inProgress = automatedTasks.filter(t => t.status === 'in-progress');
+    const completed = automatedTasks.filter(t => t.status === 'completed');
+    
+    // Render in columns
+    renderTaskCards(todo, document.getElementById('todoColumn'));
+    renderTaskCards(inProgress, document.getElementById('inProgressColumn'));
+    renderTaskCards(completed, document.getElementById('completedColumn'));
+    
+    console.log('✅ Automated tasks displayed:', automatedTasks.length);
+}
+
+// ADD styles for automated tasks
+const automationStyles = document.createElement('style');
+automationStyles.textContent = `
+    /* Animated pulse for automation badge */
+    .badge.bg-info {
+        animation: subtle-pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes subtle-pulse {
+        0%, 100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+        50% {
+            opacity: 0.8;
+            transform: scale(0.98);
+        }
+    }
+    
+    /* Fade in animation for task cards */
+    .fade-in {
+        animation: fadeIn 0.3s ease-in;
+    }
+    
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    /* Task card header styling */
+    .task-card-header {
+        margin-bottom: 0.75rem;
+    }
+    
+    .task-card-header h6 {
+        font-weight: 600;
+        color: #2c3e50;
+        margin: 0;
+    }
+    
+    /* Task description styling */
+    .task-description {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-bottom: 0.75rem;
+        line-height: 1.5;
+    }
+    
+    /* Task meta badges */
+    .task-meta {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.5rem;
+    }
+    
+    .task-meta .badge {
+        font-size: 0.75rem;
+        padding: 0.35rem 0.65rem;
+        font-weight: 500;
+    }
+    
+    /* Empty state styling */
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        display: block;
+        font-size: 3rem;
+        opacity: 0.3;
+        margin-bottom: 1rem;
+    }
+    
+    .empty-state p {
+        margin: 0.5rem 0;
+        font-size: 1rem;
+    }
+    
+    .empty-state small {
+        font-size: 0.85rem;
+        opacity: 0.7;
+    }
+`;
+
+// Inject styles
+if (!document.getElementById('automation-styles')) {
+    automationStyles.id = 'automation-styles';
+    document.head.appendChild(automationStyles);
+}
+
+// Make sure this runs when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('✅ Automation display styles loaded');
+});
 
 // Edit Task
 async function editTask(taskId) {

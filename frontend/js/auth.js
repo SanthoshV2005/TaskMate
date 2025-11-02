@@ -17,12 +17,26 @@ function showMessage(message, type = 'error') {
         }, 5000);
     } else {
         console.log(`${type.toUpperCase()}: ${message}`);
+        // Also show alert if no message div
+        if (type === 'error') {
+            alert(message);
+        }
     }
 }
 
 function saveUserData(userData) {
     try {
-        console.log('💾 Attempting to save user data:', userData);
+        console.log('💾 Attempting to save user data:', {
+            hasToken: !!userData.token,
+            email: userData.email,
+            name: userData.name
+        });
+        
+        // Validate required fields
+        if (!userData.token || !userData.email) {
+            console.error('❌ Invalid user data - missing required fields');
+            return false;
+        }
         
         // Save as JSON string
         localStorage.setItem('user', JSON.stringify(userData));
@@ -41,19 +55,31 @@ function saveUserData(userData) {
 function getUserData() {
     try {
         const userData = localStorage.getItem('user');
-        console.log('📦 Raw user data from localStorage:', userData);
         
-        if (!userData) {
-            console.log('⚠️ No user data found in localStorage');
+        if (!userData || userData === 'undefined' || userData === 'null') {
+            console.log('⚠️ No valid user data found in localStorage');
             return null;
         }
         
         const parsed = JSON.parse(userData);
-        console.log('✅ Parsed user data:', parsed);
+        
+        // Validate parsed data has required fields
+        if (!parsed.token || !parsed.email) {
+            console.log('⚠️ Invalid user data structure, clearing...');
+            localStorage.removeItem('user');
+            return null;
+        }
+        
+        console.log('✅ Valid user data found:', {
+            email: parsed.email,
+            name: parsed.name,
+            hasToken: !!parsed.token
+        });
         
         return parsed;
     } catch (error) {
-        console.error('❌ Error getting user data:', error);
+        console.error('❌ Error parsing user data:', error);
+        localStorage.removeItem('user'); // Clear corrupted data
         return null;
     }
 }
@@ -69,13 +95,20 @@ function clearUserData() {
     }
 }
 
+function isAuthenticated() {
+    const userData = getUserData();
+    const isAuth = userData !== null && !!userData.token;
+    console.log('🔐 Authentication check:', isAuth);
+    return isAuth;
+}
+
 // Login Handler
 async function handleLogin(event) {
     event.preventDefault();
     console.log('🔐 Login form submitted');
     
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
+    const email = document.getElementById('email')?.value.trim();
+    const password = document.getElementById('password')?.value;
     
     console.log('📧 Email:', email);
     
@@ -85,9 +118,14 @@ async function handleLogin(event) {
     }
     
     const submitButton = event.target.querySelector('button[type="submit"]');
+    if (!submitButton) {
+        console.error('❌ Submit button not found');
+        return;
+    }
+    
     const originalText = submitButton.textContent;
     submitButton.disabled = true;
-    submitButton.textContent = 'Logging in...';
+    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Logging in...';
     
     try {
         const loginUrl = `${API_BASE_URL}/auth/login`;
@@ -104,7 +142,11 @@ async function handleLogin(event) {
         console.log('📥 Response status:', response.status);
         
         const data = await response.json();
-        console.log('📦 Response data:', data);
+        console.log('📦 Response data:', {
+            success: data.success,
+            hasToken: !!data.token,
+            hasUser: !!data.user
+        });
         
         if (!response.ok) {
             throw new Error(data.message || 'Login failed');
@@ -113,15 +155,15 @@ async function handleLogin(event) {
         if (data.success && data.token) {
             console.log('✅ Login successful!');
             
-            // Prepare user data
+            // Prepare user data with all required fields
             const userData = {
                 token: data.token,
                 email: data.user?.email || email,
                 name: data.user?.name || 'User',
-                id: data.user?._id || data.user?.id
+                id: data.user?._id || data.user?.id || 'unknown'
             };
             
-            console.log('💾 Saving user data:', userData);
+            console.log('💾 Saving user data...');
             
             // Save to localStorage
             const saved = saveUserData(userData);
@@ -130,13 +172,16 @@ async function handleLogin(event) {
                 console.log('✅ User data saved successfully');
                 showMessage('Login successful! Redirecting...', 'success');
                 
-                // Small delay to ensure localStorage is written
+                // Clear form
+                event.target.reset();
+                
+                // Redirect after short delay
                 setTimeout(() => {
                     console.log('🔄 Redirecting to dashboard...');
-                    window.location.href = '/dashboard.html';
-                }, 500);
+                    window.location.href = 'dashboard.html';
+                }, 1000);
             } else {
-                throw new Error('Failed to save user data');
+                throw new Error('Failed to save user data to browser storage');
             }
         } else {
             throw new Error(data.message || 'Invalid response from server');
@@ -146,7 +191,7 @@ async function handleLogin(event) {
         console.error('❌ Login error:', error);
         showMessage(error.message || 'Login failed. Please try again.', 'error');
         submitButton.disabled = false;
-        submitButton.textContent = originalText;
+        submitButton.innerHTML = originalText;
     }
 }
 
@@ -155,10 +200,10 @@ async function handleRegister(event) {
     event.preventDefault();
     console.log('📝 Register form submitted');
     
-    const name = document.getElementById('name').value.trim();
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
-    const confirmPassword = document.getElementById('confirmPassword').value;
+    const name = document.getElementById('name')?.value.trim();
+    const email = document.getElementById('email')?.value.trim();
+    const password = document.getElementById('password')?.value;
+    const confirmPassword = document.getElementById('confirmPassword')?.value;
     
     console.log('👤 Name:', name);
     console.log('📧 Email:', email);
@@ -180,9 +225,14 @@ async function handleRegister(event) {
     }
     
     const submitButton = event.target.querySelector('button[type="submit"]');
+    if (!submitButton) {
+        console.error('❌ Submit button not found');
+        return;
+    }
+    
     const originalText = submitButton.textContent;
     submitButton.disabled = true;
-    submitButton.textContent = 'Creating account...';
+    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating account...';
     
     try {
         const registerUrl = `${API_BASE_URL}/auth/register`;
@@ -199,7 +249,10 @@ async function handleRegister(event) {
         console.log('📥 Response status:', response.status);
         
         const data = await response.json();
-        console.log('📦 Response data:', data);
+        console.log('📦 Response data:', {
+            success: data.success,
+            hasToken: !!data.token
+        });
         
         if (!response.ok) {
             throw new Error(data.message || 'Registration failed');
@@ -209,8 +262,11 @@ async function handleRegister(event) {
             console.log('✅ Registration successful!');
             showMessage('Registration successful! Redirecting to login...', 'success');
             
+            // Clear form
+            event.target.reset();
+            
             setTimeout(() => {
-                window.location.href = '/login.html';
+                window.location.href = 'login.html';
             }, 1500);
         } else {
             throw new Error(data.message || 'Registration failed');
@@ -220,13 +276,50 @@ async function handleRegister(event) {
         console.error('❌ Registration error:', error);
         showMessage(error.message || 'Registration failed. Please try again.', 'error');
         submitButton.disabled = false;
-        submitButton.textContent = originalText;
+        submitButton.innerHTML = originalText;
+    }
+}
+
+// Logout function
+function logout() {
+    console.log('🚪 Logging out...');
+    clearUserData();
+    window.location.href = 'login.html';
+}
+
+// Check authentication and redirect if needed
+function checkAuthAndRedirect() {
+    const currentPage = window.location.pathname.split('/').pop();
+    
+    console.log('📄 Current page:', currentPage);
+    
+    // If on login or register page, check if already logged in
+    if (currentPage === 'login.html' || currentPage === 'register.html') {
+        if (isAuthenticated()) {
+            console.log('ℹ️ User already logged in on auth page, redirecting to dashboard...');
+            window.location.replace('dashboard.html');
+        } else {
+            console.log('✅ No active session, staying on', currentPage);
+        }
+    }
+    
+    // If on dashboard, check if logged in
+    if (currentPage === 'dashboard.html') {
+        if (!isAuthenticated()) {
+            console.log('⚠️ Not authenticated on dashboard, redirecting to login...');
+            window.location.replace('login.html');
+        } else {
+            console.log('✅ Authenticated, can access dashboard');
+        }
     }
 }
 
 // Initialize forms when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     console.log('✅ DOM Content Loaded');
+    
+    // Check authentication status immediately
+    checkAuthAndRedirect();
     
     // Check for login form
     const loginForm = document.getElementById('loginForm');
@@ -242,13 +335,16 @@ document.addEventListener('DOMContentLoaded', () => {
         registerForm.addEventListener('submit', handleRegister);
     }
     
-    // Check if user is already logged in
-    const currentPage = window.location.pathname;
-    if (currentPage.includes('login.html') || currentPage.includes('register.html')) {
-        const userData = getUserData();
-        if (userData && userData.token) {
-            console.log('✅ User already logged in, redirecting to dashboard');
-            window.location.href = '/dashboard.html';
-        }
+    // Add logout functionality if logout button exists
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        console.log('✅ Logout button found, attaching listener');
+        logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            logout();
+        });
     }
 });
+
+// Also run check immediately (before DOM load)
+checkAuthAndRedirect();
