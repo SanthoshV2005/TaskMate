@@ -104,7 +104,15 @@ router.get('/:id', auth, async (req, res) => {
 // ========================================
 router.post('/', auth, async (req, res) => {
     try {
-        const { title, description, priority, dueDate, status } = req.body;
+        const { 
+            title, 
+            description, 
+            priority, 
+            dueDate, 
+            status,
+            isRecurring,        // ✅ ADDED
+            recurringFrequency  // ✅ ADDED
+        } = req.body;
 
         // Validate required fields
         if (!title || !title.trim()) {
@@ -120,11 +128,15 @@ router.post('/', auth, async (req, res) => {
             description: description?.trim() || '',
             priority: priority || 'medium',
             dueDate: dueDate || null,
-            status: status || 'pending',
+            status: status || 'todo',
+            isRecurring: isRecurring || false,              // ✅ ADDED
+            recurringFrequency: recurringFrequency || null, // ✅ ADDED
             user: req.userId
         });
 
         await task.save();
+
+        console.log('✅ Created task with isRecurring:', task.isRecurring); // Debug log
 
         res.status(201).json({
             success: true,
@@ -148,7 +160,18 @@ router.post('/', auth, async (req, res) => {
 // ========================================
 router.put('/:id', auth, async (req, res) => {
     try {
-        const { title, description, priority, dueDate, status } = req.body;
+        const { 
+            title, 
+            description, 
+            priority, 
+            dueDate, 
+            status,
+            isRecurring,        // ✅ ADDED
+            recurringFrequency  // ✅ ADDED
+        } = req.body;
+
+        console.log('📥 Update request body:', req.body); // Debug log
+        console.log('🔄 isRecurring value:', isRecurring, typeof isRecurring); // Debug log
 
         // Find task
         let task = await Task.findOne({
@@ -177,8 +200,25 @@ router.put('/:id', auth, async (req, res) => {
         if (priority !== undefined) task.priority = priority;
         if (dueDate !== undefined) task.dueDate = dueDate;
         if (status !== undefined) task.status = status;
+        
+        // ✅ ADDED: Update automation fields
+        if (isRecurring !== undefined) {
+            task.isRecurring = isRecurring;
+            console.log('✅ Updated isRecurring to:', task.isRecurring);
+        }
+        if (recurringFrequency !== undefined) {
+            task.recurringFrequency = recurringFrequency;
+            console.log('✅ Updated recurringFrequency to:', task.recurringFrequency);
+        }
 
         await task.save();
+
+        console.log('💾 Saved task:', {
+            id: task._id,
+            title: task.title,
+            isRecurring: task.isRecurring,
+            recurringFrequency: task.recurringFrequency
+        });
 
         res.json({
             success: true,
