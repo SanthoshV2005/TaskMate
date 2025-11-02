@@ -1,6 +1,6 @@
 // ========================================
 // TASKMATE - DASHBOARD.JS
-// Fixed - Automation Shows Real Tasks from Database
+// FINAL FIX - Handles both response formats
 // ========================================
 
 // API Configuration
@@ -109,7 +109,7 @@ function setupEventListeners() {
         };
     }
     
-    // View Automations - FIXED to show actual database tasks
+    // View Automations
     const viewAutoBtn = document.getElementById('viewAutomationsBtn');
     if (viewAutoBtn) {
         viewAutoBtn.onclick = () => showAutomationRules();
@@ -149,6 +149,9 @@ function openEditTaskModal(taskId) {
         return;
     }
     
+    console.log('📝 Editing task:', task);
+    console.log('🔄 isRecurring:', task.isRecurring, typeof task.isRecurring);
+    
     // Fill form
     document.getElementById('taskTitle').value = task.title || '';
     document.getElementById('taskDescription').value = task.description || '';
@@ -162,11 +165,13 @@ function openEditTaskModal(taskId) {
         document.getElementById('taskDueDate').value = dateStr;
     }
     
-    // Handle recurring
-    const isRecurring = task.isRecurring || false;
+    // 🔧 FIX: Handle recurring - check both boolean and string
+    const isRecurring = task.isRecurring === true || task.isRecurring === 'true';
     document.getElementById('isRecurring').checked = isRecurring;
     document.getElementById('recurringFrequency').value = task.recurringFrequency || 'daily';
     document.getElementById('frequencyGroup').style.display = isRecurring ? 'block' : 'none';
+    
+    console.log('✅ Set recurring checkbox to:', isRecurring);
     
     // Update modal title
     document.getElementById('modalTitle').textContent = 'Edit Task';
@@ -184,7 +189,8 @@ async function saveTask() {
     const priority = document.getElementById('taskPriority').value;
     const status = document.getElementById('taskStatus').value;
     const dueDate = document.getElementById('taskDueDate').value;
-    const isRecurring = document.getElementById('isRecurring').checked;
+    const isRecurringCheckbox = document.getElementById('isRecurring');
+    const isRecurring = isRecurringCheckbox ? isRecurringCheckbox.checked : false;
     const frequency = document.getElementById('recurringFrequency').value;
     
     if (!title) {
@@ -198,17 +204,18 @@ async function saveTask() {
         priority: priority.toLowerCase(),
         status: status.toLowerCase().replace(/\s+/g, '-'),
         dueDate,
-        isRecurring,
+        isRecurring: isRecurring,  // 🔧 Boolean value
         recurringFrequency: isRecurring ? frequency : null
     };
     
-    console.log('Task data:', taskData);
+    console.log('📤 Task data to save:', taskData);
+    console.log('🔄 isRecurring type:', typeof taskData.isRecurring, 'value:', taskData.isRecurring);
     
     try {
         let response;
         
         if (currentEditingTaskId) {
-            console.log('Updating task:', currentEditingTaskId);
+            console.log('🔄 Updating task:', currentEditingTaskId);
             response = await fetch(`${API_BASE_URL}/tasks/${currentEditingTaskId}`, {
                 method: 'PUT',
                 headers: {
@@ -218,7 +225,7 @@ async function saveTask() {
                 body: JSON.stringify(taskData)
             });
         } else {
-            console.log('Creating new task');
+            console.log('➕ Creating new task');
             response = await fetch(`${API_BASE_URL}/tasks`, {
                 method: 'POST',
                 headers: {
@@ -229,11 +236,12 @@ async function saveTask() {
             });
         }
         
-        console.log('Response status:', response.status);
+        console.log('📡 Response status:', response.status);
         
         if (response.ok) {
             const result = await response.json();
             console.log('✅ Task saved:', result);
+            console.log('🔄 Saved isRecurring:', result.isRecurring, typeof result.isRecurring);
             
             const message = currentEditingTaskId 
                 ? '✅ Task updated successfully!' 
@@ -253,9 +261,9 @@ async function saveTask() {
     }
 }
 
-// Load Tasks
+// 🔧 FIX: Load Tasks - Handle both response formats
 async function loadTasks() {
-    console.log('📥 Loading tasks...');
+    console.log('📥 Loading tasks from API...');
     
     try {
         const response = await fetch(`${API_BASE_URL}/tasks`, {
@@ -266,25 +274,49 @@ async function loadTasks() {
         
         if (response.ok) {
             const data = await response.json();
-            tasks = data.tasks || [];
+            console.log('📦 Raw API response:', data);
+            
+            // 🔧 FIX: Handle both formats - array or object with tasks property
+            if (Array.isArray(data)) {
+                tasks = data;
+                console.log('✅ Response is direct array');
+            } else if (data.tasks && Array.isArray(data.tasks)) {
+                tasks = data.tasks;
+                console.log('✅ Response has tasks property');
+            } else {
+                console.error('❌ Unexpected response format:', data);
+                tasks = [];
+            }
+            
             console.log(`✅ Loaded ${tasks.length} tasks`);
             
-            // Count automated tasks
-            const automatedCount = tasks.filter(t => t.isRecurring === true).length;
+            // Debug: Log all tasks with their isRecurring status
+            tasks.forEach((task, index) => {
+                console.log(`Task ${index + 1}: "${task.title}" - isRecurring:`, 
+                    task.isRecurring, 
+                    `(type: ${typeof task.isRecurring})`);
+            });
+            
+            // Count automated tasks (check both boolean and string)
+            const automatedCount = tasks.filter(t => 
+                t.isRecurring === true || t.isRecurring === 'true'
+            ).length;
             console.log(`🤖 Found ${automatedCount} automated tasks`);
             
             displayTasks(tasks);
         } else {
-            console.error('❌ Failed to load tasks');
+            console.error('❌ Failed to load tasks, status:', response.status);
+            const errorText = await response.text();
+            console.error('Error response:', errorText);
         }
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('❌ Error loading tasks:', error);
     }
 }
 
 // Display Tasks
 function displayTasks(tasksToDisplay) {
-    console.log('🎨 Displaying tasks:', tasksToDisplay.length);
+    console.log('🎨 Displaying', tasksToDisplay.length, 'tasks');
     
     const todoCol = document.getElementById('todoColumn');
     const progressCol = document.getElementById('inProgressColumn');
@@ -318,7 +350,9 @@ function createTaskCard(task) {
     card.dataset.taskId = task._id;
     
     const dueDate = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No date';
-    const isAutomated = task.isRecurring === true;
+    
+    // 🔧 FIX: Check both boolean and string for automation
+    const isAutomated = task.isRecurring === true || task.isRecurring === 'true';
     
     const automationBadge = isAutomated ? 
         `<span class="badge bg-info text-white ms-2">🤖 ${task.recurringFrequency || 'daily'}</span>` : '';
@@ -426,31 +460,36 @@ function searchTasks(query) {
     displayTasks(filtered);
 }
 
-// ========================================
-// FIXED: Show Automation Rules from Database
-// Now shows ACTUAL tasks from database, not localStorage
-// ========================================
+// 🔧 FIX: Show Automation Rules - Check both formats
 function showAutomationRules() {
     console.log('🤖 Showing automation rules from database...');
+    console.log('📊 Total tasks:', tasks.length);
     
-    // Filter tasks that have isRecurring = true from the database
-    const automatedTasks = tasks.filter(task => task.isRecurring === true);
+    // Debug all tasks
+    tasks.forEach((task, i) => {
+        console.log(`Task ${i + 1}: "${task.title}" - isRecurring:`, task.isRecurring, typeof task.isRecurring);
+    });
     
-    console.log('Found automated tasks in database:', automatedTasks.length);
+    // 🔧 FIX: Filter tasks checking both boolean and string
+    const automatedTasks = tasks.filter(task => 
+        task.isRecurring === true || task.isRecurring === 'true'
+    );
+    
+    console.log('🤖 Found automated tasks in database:', automatedTasks.length);
     
     if (automatedTasks.length === 0) {
         alert('❌ No automated tasks found!\n\n' +
               'To create an automated task:\n' +
               '1. Click "Add New Task"\n' +
               '2. Fill in task details\n' +
-              '3. Check "🔄 Make this a recurring task"\n' +
+              '3. ✅ Check "🔄 Make this a recurring task"\n' +
               '4. Select frequency (daily/weekly/monthly)\n' +
-              '5. Save the task\n\n' +
-              'The task will then be marked as automated.');
+              '5. Click "Save Task"\n\n' +
+              'The task will show a blue 🤖 badge when automated.');
         return;
     }
     
-    // Build detailed message showing actual tasks from database
+    // Build detailed message
     let message = '🤖 AUTOMATED TASKS FROM DATABASE\n';
     message += '═'.repeat(60) + '\n\n';
     
@@ -481,40 +520,39 @@ function showAutomationRules() {
     
     message += '═'.repeat(60) + '\n';
     message += `Total automated tasks: ${automatedTasks.length}\n\n`;
-    message += '💡 TIP: These tasks are saved in the database.\n';
-    message += 'They will persist across logins and devices.\n';
-    message += 'Look for tasks with the blue 🤖 badge on the dashboard!';
+    message += '💡 TIP: These tasks persist across logins!\n';
+    message += 'Look for the blue 🤖 badge on your dashboard.';
     
     alert(message);
 }
 
 // Clear Automation Rules
-function clearAutomationRules() {
+async function clearAutomationRules() {
     console.log('🧹 Clearing automation rules...');
     
-    const automatedTasks = tasks.filter(task => task.isRecurring === true);
+    const automatedTasks = tasks.filter(task => 
+        task.isRecurring === true || task.isRecurring === 'true'
+    );
     
     if (automatedTasks.length === 0) {
         alert('ℹ️ No automated tasks to clear!');
         return;
     }
     
-    const confirmMessage = `⚠️ WARNING: This will remove automation from ${automatedTasks.length} task(s).\n\n` +
-                          `The tasks will remain, but they will no longer be marked as recurring.\n\n` +
+    const confirmMessage = `⚠️ WARNING: Remove automation from ${automatedTasks.length} task(s)?\n\n` +
+                          `Tasks will remain, but won't be recurring.\n\n` +
                           `Tasks to be affected:\n` +
                           automatedTasks.map((t, i) => `${i + 1}. ${t.title}`).join('\n') +
-                          `\n\nAre you sure you want to continue?`;
+                          `\n\nContinue?`;
     
     if (!confirm(confirmMessage)) {
         return;
     }
     
-    // Update all automated tasks to remove recurring flag
-    let updateCount = 0;
-    
-    automatedTasks.forEach(async (task) => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/tasks/${task._id}`, {
+    // Update all automated tasks
+    try {
+        const updatePromises = automatedTasks.map(task =>
+            fetch(`${API_BASE_URL}/tasks/${task._id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -525,22 +563,21 @@ function clearAutomationRules() {
                     isRecurring: false,
                     recurringFrequency: null
                 })
-            });
-            
-            if (response.ok) {
-                updateCount++;
-                console.log(`✅ Removed automation from: ${task.title}`);
-                
-                // Reload tasks after all updates
-                if (updateCount === automatedTasks.length) {
-                    await loadTasks();
-                    alert(`✅ Successfully removed automation from ${updateCount} task(s)!`);
-                }
-            }
-        } catch (error) {
-            console.error('❌ Error updating task:', error);
-        }
-    });
+            })
+        );
+        
+        const results = await Promise.all(updatePromises);
+        const successCount = results.filter(r => r.ok).length;
+        
+        console.log(`✅ Removed automation from ${successCount}/${automatedTasks.length} tasks`);
+        
+        await loadTasks();
+        alert(`✅ Removed automation from ${successCount} task(s)!`);
+        
+    } catch (error) {
+        console.error('❌ Error clearing automations:', error);
+        alert('❌ Error updating tasks');
+    }
 }
 
 // Helper: Escape HTML
