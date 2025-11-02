@@ -10,33 +10,41 @@ const taskSchema = new mongoose.Schema({
         type: String,
         required: [true, 'Task title is required'],
         trim: true,
-        minlength: [3, 'Title must be at least 3 characters long'],
+        minlength: [3, 'Title must be at least 3 characters'],
         maxlength: [100, 'Title cannot exceed 100 characters']
     },
     description: {
         type: String,
         required: [true, 'Task description is required'],
         trim: true,
-        minlength: [10, 'Description must be at least 10 characters long']
+        minlength: [10, 'Description must be at least 10 characters']
     },
     priority: {
         type: String,
-        enum: ['Low', 'Medium', 'High'],
-        default: 'Medium',
-        required: true
+        enum: {
+            values: ['low', 'medium', 'high'],  // ✅ Lowercase to match frontend
+            message: '{VALUE} is not a valid priority. Use: low, medium, or high'
+        },
+        default: 'medium',
+        required: true,
+        lowercase: true  // Automatically converts to lowercase
     },
     status: {
         type: String,
-        enum: ['To-Do', 'In Progress', 'Done'],
-        default: 'To-Do',
-        required: true
+        enum: {
+            values: ['todo', 'in-progress', 'completed'],  // ✅ Matches frontend exactly
+            message: '{VALUE} is not a valid status. Use: todo, in-progress, or completed'
+        },
+        default: 'todo',
+        required: true,
+        lowercase: true  // Automatically converts to lowercase
     },
     dueDate: {
         type: Date,
         required: [true, 'Due date is required'],
         validate: {
             validator: function(value) {
-                // Allow past dates for existing tasks, but validate for new ones
+                // Keep your original validation logic
                 if (this.isNew) {
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
@@ -73,7 +81,7 @@ taskSchema.pre('save', function(next) {
     next();
 });
 
-// Add index for faster queries
+// Add indexes for faster queries
 taskSchema.index({ user: 1, status: 1 });
 taskSchema.index({ user: 1, dueDate: 1 });
 
