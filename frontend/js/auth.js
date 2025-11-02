@@ -1,10 +1,18 @@
+// ========================================
+// TASKMATE - AUTH.JS
+// Fixed - No Auto-Redirect on Login Page
+// ========================================
+
 // API Configuration
 const API_BASE_URL = 'https://taskmate-backends.onrender.com/api';
 
 console.log('✅ Auth script loaded');
 console.log('📡 API URL:', API_BASE_URL);
 
-// Utility Functions
+// ========================================
+// UTILITY FUNCTIONS
+// ========================================
+
 function showMessage(message, type = 'error') {
     const messageDiv = document.getElementById('message');
     if (messageDiv) {
@@ -17,7 +25,6 @@ function showMessage(message, type = 'error') {
         }, 5000);
     } else {
         console.log(`${type.toUpperCase()}: ${message}`);
-        // Also show alert if no message div
         if (type === 'error') {
             alert(message);
         }
@@ -32,16 +39,13 @@ function saveUserData(userData) {
             name: userData.name
         });
         
-        // Validate required fields
         if (!userData.token || !userData.email) {
             console.error('❌ Invalid user data - missing required fields');
             return false;
         }
         
-        // Save as JSON string
         localStorage.setItem('user', JSON.stringify(userData));
         
-        // Verify it was saved
         const saved = localStorage.getItem('user');
         console.log('✅ User data saved successfully:', saved !== null);
         
@@ -63,7 +67,6 @@ function getUserData() {
         
         const parsed = JSON.parse(userData);
         
-        // Validate parsed data has required fields
         if (!parsed.token || !parsed.email) {
             console.log('⚠️ Invalid user data structure, clearing...');
             localStorage.removeItem('user');
@@ -79,7 +82,7 @@ function getUserData() {
         return parsed;
     } catch (error) {
         console.error('❌ Error parsing user data:', error);
-        localStorage.removeItem('user'); // Clear corrupted data
+        localStorage.removeItem('user');
         return null;
     }
 }
@@ -102,7 +105,9 @@ function isAuthenticated() {
     return isAuth;
 }
 
-// Login Handler
+// ========================================
+// LOGIN HANDLER
+// ========================================
 async function handleLogin(event) {
     event.preventDefault();
     console.log('🔐 Login form submitted');
@@ -165,14 +170,12 @@ async function handleLogin(event) {
             
             console.log('💾 Saving user data...');
             
-            // Save to localStorage
             const saved = saveUserData(userData);
             
             if (saved) {
                 console.log('✅ User data saved successfully');
                 showMessage('Login successful! Redirecting...', 'success');
                 
-                // Clear form
                 event.target.reset();
                 
                 // Redirect after short delay
@@ -195,7 +198,9 @@ async function handleLogin(event) {
     }
 }
 
-// Register Handler
+// ========================================
+// REGISTER HANDLER
+// ========================================
 async function handleRegister(event) {
     event.preventDefault();
     console.log('📝 Register form submitted');
@@ -208,7 +213,6 @@ async function handleRegister(event) {
     console.log('👤 Name:', name);
     console.log('📧 Email:', email);
     
-    // Validation
     if (!name || !email || !password || !confirmPassword) {
         showMessage('Please fill in all fields', 'error');
         return;
@@ -262,7 +266,6 @@ async function handleRegister(event) {
             console.log('✅ Registration successful!');
             showMessage('Registration successful! Redirecting to login...', 'success');
             
-            // Clear form
             event.target.reset();
             
             setTimeout(() => {
@@ -280,62 +283,80 @@ async function handleRegister(event) {
     }
 }
 
-// Logout function
+// ========================================
+// LOGOUT FUNCTION
+// ========================================
 function logout() {
     console.log('🚪 Logging out...');
     clearUserData();
     window.location.href = 'login.html';
 }
 
-// Check authentication and redirect if needed
-function checkAuthAndRedirect() {
+// ========================================
+// AUTHENTICATION CHECK
+// ONLY FOR DASHBOARD PAGE
+// ========================================
+function checkDashboardAuth() {
     const currentPage = window.location.pathname.split('/').pop();
     
-    console.log('📄 Current page:', currentPage);
-    
-    // If on login or register page, check if already logged in
-    if (currentPage === 'login.html' || currentPage === 'register.html') {
-        if (isAuthenticated()) {
-            console.log('ℹ️ User already logged in on auth page, redirecting to dashboard...');
-            window.location.replace('dashboard.html');
-        } else {
-            console.log('✅ No active session, staying on', currentPage);
-        }
-    }
-    
-    // If on dashboard, check if logged in
+    // ONLY check auth on dashboard page
     if (currentPage === 'dashboard.html') {
+        console.log('📄 On dashboard page - checking authentication...');
+        
         if (!isAuthenticated()) {
-            console.log('⚠️ Not authenticated on dashboard, redirecting to login...');
+            console.log('⚠️ Not authenticated, redirecting to login...');
             window.location.replace('login.html');
+            return false;
         } else {
-            console.log('✅ Authenticated, can access dashboard');
+            console.log('✅ Authenticated, access granted');
+            return true;
         }
     }
+    
+    // For other pages, just log
+    console.log('📄 Current page:', currentPage);
+    return true;
 }
 
-// Initialize forms when DOM is loaded
+// ========================================
+// DOM INITIALIZATION
+// ========================================
 document.addEventListener('DOMContentLoaded', () => {
     console.log('✅ DOM Content Loaded');
     
-    // Check authentication status immediately
-    checkAuthAndRedirect();
+    const currentPage = window.location.pathname.split('/').pop();
+    console.log('📄 Current page:', currentPage);
     
-    // Check for login form
-    const loginForm = document.getElementById('loginForm');
-    if (loginForm) {
-        console.log('✅ Login form found, attaching listener');
-        loginForm.addEventListener('submit', handleLogin);
+    // ONLY check auth on dashboard
+    if (currentPage === 'dashboard.html') {
+        checkDashboardAuth();
+        // Exit early - dashboard.js will handle everything else
+        return;
     }
     
-    // Check for register form
-    const registerForm = document.getElementById('registerForm');
-    if (registerForm) {
-        console.log('✅ Register form found, attaching listener');
-        registerForm.addEventListener('submit', handleRegister);
+    // For login page - attach form listener
+    if (currentPage === 'login.html') {
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm) {
+            console.log('✅ Login form found, attaching listener');
+            loginForm.addEventListener('submit', handleLogin);
+        } else {
+            console.error('❌ Login form not found!');
+        }
     }
     
-    // Add logout functionality if logout button exists
+    // For register page - attach form listener
+    if (currentPage === 'register.html') {
+        const registerForm = document.getElementById('registerForm');
+        if (registerForm) {
+            console.log('✅ Register form found, attaching listener');
+            registerForm.addEventListener('submit', handleRegister);
+        } else {
+            console.error('❌ Register form not found!');
+        }
+    }
+    
+    // Logout button (if exists on any page)
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
         console.log('✅ Logout button found, attaching listener');
@@ -346,5 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Also run check immediately (before DOM load)
-checkAuthAndRedirect();
+// ========================================
+// MAKE LOGOUT GLOBALLY ACCESSIBLE
+// ========================================
+window.logout = logout;
