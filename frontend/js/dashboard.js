@@ -267,16 +267,15 @@ async function saveTask(e) {
     }
     
     // Prepare task data
-    const taskData = {
-        title,
-        description,
-        priority,
-        status,
-        dueDate: dueDate || null,
-        isRecurring,
-        frequency: isRecurring ? frequency : null
-    };
-    
+   const taskData = {
+    title, 
+    description, 
+    priority: priority.toLowerCase(),  // ✅ Ensure lowercase
+    status: status.toLowerCase().replace(/\s+/g, '-'),  // ✅ Convert to hyphenated
+    dueDate,
+    isRecurring,
+    recurringFrequency: isRecurring ? frequency : null  // ✅ Match backend field name
+};
     console.log('Task data:', taskData);
     
     try {
