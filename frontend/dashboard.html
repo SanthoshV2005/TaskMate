@@ -130,6 +130,35 @@
             max-width: 300px;
         }
         
+        /* Modal Fixes */
+        .modal-dialog-scrollable .modal-body {
+            overflow-y: auto;
+            max-height: calc(100vh - 200px);
+        }
+        
+        .modal-body input,
+        .modal-body textarea,
+        .modal-body select {
+            pointer-events: auto !important;
+            cursor: text !important;
+        }
+        
+        .modal-body input:focus,
+        .modal-body textarea:focus,
+        .modal-body select:focus {
+            outline: 2px solid #667eea;
+            outline-offset: 2px;
+        }
+        
+        /* Ensure modal backdrop doesn't interfere */
+        .modal-backdrop {
+            z-index: 1040;
+        }
+        
+        .modal {
+            z-index: 1050;
+        }
+        
         @media (max-width: 768px) {
             .kanban-board {
                 grid-template-columns: 1fr;
@@ -248,8 +277,8 @@
     </div>
 
     <!-- Add/Edit Task Modal -->
-    <div class="modal fade" id="taskModal" tabindex="-1" aria-labelledby="modalTitle" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+    <div class="modal fade" id="taskModal" tabindex="-1" aria-labelledby="modalTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="modalTitle">Add New Task</h5>

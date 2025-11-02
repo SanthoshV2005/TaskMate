@@ -1,6 +1,6 @@
 // ========================================
 // TASKMATE - DASHBOARD.JS
-// Complete Working Version with Automation
+// Complete Working Version with Fixed Auth & Modal
 // ========================================
 
 // API Configuration
@@ -9,11 +9,42 @@ const API_BASE_URL = 'https://taskmate-backends.onrender.com/api';
 console.log('✅ Dashboard script loaded');
 console.log('📡 API URL:', API_BASE_URL);
 
-// Check if user is logged in
-let user = JSON.parse(localStorage.getItem('user'));
-if (!user || !user.token) {
-    console.log('❌ No user found, redirecting to login...');
-    window.location.href = 'login.html';
+// CRITICAL: Check if user is logged in FIRST
+function checkAuthentication() {
+    const userStr = localStorage.getItem('user');
+    console.log('Checking authentication...');
+    console.log('Raw user data:', userStr);
+    
+    if (!userStr) {
+        console.log('❌ No user data found - redirecting to login');
+        window.location.href = 'login.html';
+        return null;
+    }
+    
+    try {
+        const user = JSON.parse(userStr);
+        console.log('Parsed user:', user);
+        
+        if (!user.token) {
+            console.log('❌ No token found - redirecting to login');
+            window.location.href = 'login.html';
+            return null;
+        }
+        
+        console.log('✅ User authenticated:', user.name);
+        return user;
+    } catch (error) {
+        console.error('❌ Error parsing user data:', error);
+        localStorage.removeItem('user');
+        window.location.href = 'login.html';
+        return null;
+    }
+}
+
+// Check authentication immediately
+let user = checkAuthentication();
+if (!user) {
+    throw new Error('Not authenticated');
 }
 
 console.log('✅ Dashboard Loaded');
@@ -28,15 +59,43 @@ let currentEditingTaskId = null;
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🎯 DOM Content Loaded');
     
-    // Initialize Bootstrap Modal
+    // Double-check authentication after DOM loads
+    user = checkAuthentication();
+    if (!user) return;
+    
+    // Initialize Bootstrap Modal with proper settings
     const modalElement = document.getElementById('taskModal');
     if (modalElement) {
         taskModal = new bootstrap.Modal(modalElement, {
-            backdrop: true,
-            keyboard: true,
-            focus: true
+            backdrop: 'static', // Prevent closing by clicking outside
+            keyboard: true,     // Allow ESC key to close
+            focus: true         // Focus on modal when opened
         });
         console.log('✅ Modal initialized');
+        
+        // Fix modal focus issues
+        modalElement.addEventListener('shown.bs.modal', function () {
+            console.log('Modal shown event fired');
+            // Small delay to ensure modal is fully rendered
+            setTimeout(() => {
+                const titleInput = document.getElementById('taskTitle');
+                if (titleInput) {
+                    titleInput.focus();
+                    console.log('Focus set to title input');
+                }
+            }, 100);
+        });
+        
+        // Handle modal backdrop issues
+        modalElement.addEventListener('hidden.bs.modal', function () {
+            console.log('Modal hidden');
+            // Remove any lingering backdrops
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => backdrop.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+        });
     }
     
     // Set user name in navbar
@@ -62,76 +121,99 @@ function setupEventListeners() {
     // Add Task Button
     const addTaskBtn = document.getElementById('addTaskBtn');
     if (addTaskBtn) {
-        addTaskBtn.onclick = openAddTaskModal;
+        addTaskBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            openAddTaskModal();
+        });
         console.log('✅ Add Task button listener attached');
     }
     
     // Save Task Button
     const saveTaskBtn = document.getElementById('saveTaskBtn');
     if (saveTaskBtn) {
-        saveTaskBtn.onclick = saveTask;
+        saveTaskBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            saveTask(e);
+        });
         console.log('✅ Save Task button listener attached');
+    }
+    
+    // Cancel Button (additional way to close modal)
+    const cancelBtn = document.querySelector('[data-bs-dismiss="modal"]');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            if (taskModal) taskModal.hide();
+        });
     }
     
     // Logout Button
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
-        logoutBtn.onclick = logout;
+        logoutBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            logout();
+        });
         console.log('✅ Logout button listener attached');
     }
     
     // View Automations Button
     const viewAutomationsBtn = document.getElementById('viewAutomationsBtn');
     if (viewAutomationsBtn) {
-        viewAutomationsBtn.onclick = function(e) {
+        viewAutomationsBtn.addEventListener('click', function(e) {
             e.preventDefault();
             showAutomationRules();
-        };
+        });
         console.log('✅ View Automations button listener attached');
     }
     
     // Clear Automations Button
     const clearAutomationsBtn = document.getElementById('clearAutomationsBtn');
     if (clearAutomationsBtn) {
-        clearAutomationsBtn.onclick = function(e) {
+        clearAutomationsBtn.addEventListener('click', function(e) {
             e.preventDefault();
             clearAutomationRules();
-        };
+        });
         console.log('✅ Clear Automations button listener attached');
     }
     
     // Recurring Task Checkbox
     const recurringCheckbox = document.getElementById('isRecurring');
     if (recurringCheckbox) {
-        recurringCheckbox.onchange = function() {
+        recurringCheckbox.addEventListener('change', function() {
             const frequencyGroup = document.getElementById('frequencyGroup');
             if (frequencyGroup) {
-                frequencyGroup.style.display = this.checked ? 'block' : 'none';
+                if (this.checked) {
+                    frequencyGroup.style.display = 'block';
+                    console.log('Frequency group shown');
+                } else {
+                    frequencyGroup.style.display = 'none';
+                    console.log('Frequency group hidden');
+                }
             }
-        };
+        });
         console.log('✅ Recurring checkbox listener attached');
     }
     
     // Filter Buttons
     const filterButtons = document.querySelectorAll('[data-filter]');
     filterButtons.forEach(btn => {
-        btn.onclick = function() {
+        btn.addEventListener('click', function() {
             const filter = this.getAttribute('data-filter');
             filterTasks(filter);
             
             // Update active state
             filterButtons.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-        };
+        });
     });
     console.log('✅ Filter buttons listener attached');
     
     // Search Input
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
-        searchInput.oninput = function() {
+        searchInput.addEventListener('input', function() {
             searchTasks(this.value);
-        };
+        });
         console.log('✅ Search input listener attached');
     }
 }
@@ -142,20 +224,23 @@ function openAddTaskModal() {
     currentEditingTaskId = null;
     
     // Clear form
-    document.getElementById('taskForm').reset();
-    document.getElementById('frequencyGroup').style.display = 'none';
-    document.getElementById('modalTitle').textContent = 'Add New Task';
+    const form = document.getElementById('taskForm');
+    if (form) form.reset();
+    
+    // Hide frequency group
+    const frequencyGroup = document.getElementById('frequencyGroup');
+    if (frequencyGroup) frequencyGroup.style.display = 'none';
+    
+    // Update modal title
+    const modalTitle = document.getElementById('modalTitle');
+    if (modalTitle) modalTitle.textContent = 'Add New Task';
     
     // Show modal
     if (taskModal) {
         taskModal.show();
-        console.log('Modal opened');
-        
-        // Focus first input
-        setTimeout(() => {
-            const titleInput = document.getElementById('taskTitle');
-            if (titleInput) titleInput.focus();
-        }, 500);
+        console.log('Modal show() called');
+    } else {
+        console.error('❌ Modal not initialized!');
     }
 }
 
@@ -177,6 +262,7 @@ async function saveTask(e) {
     // Validation
     if (!title) {
         alert('❌ Please enter a task title');
+        document.getElementById('taskTitle').focus();
         return;
     }
     
@@ -249,7 +335,7 @@ async function saveTask(e) {
         }
     } catch (error) {
         console.error('❌ Error:', error);
-        alert('❌ Failed to save task. Please try again.');
+        alert('❌ Failed to save task. Please check your connection and try again.');
     }
 }
 
@@ -271,6 +357,10 @@ async function loadTasks() {
             tasks = data.tasks || [];
             console.log(`✅ Loaded ${tasks.length} tasks`);
             displayTasks(tasks);
+        } else if (response.status === 401) {
+            console.error('❌ Unauthorized - redirecting to login');
+            localStorage.removeItem('user');
+            window.location.href = 'login.html';
         } else {
             console.error('❌ Failed to load tasks');
             alert('❌ Failed to load tasks');
@@ -379,7 +469,10 @@ async function editTask(taskId) {
     document.getElementById('recurringFrequency').value = task.frequency || 'daily';
     
     // Show/hide frequency group
-    document.getElementById('frequencyGroup').style.display = task.isRecurring ? 'block' : 'none';
+    const frequencyGroup = document.getElementById('frequencyGroup');
+    if (frequencyGroup) {
+        frequencyGroup.style.display = task.isRecurring ? 'block' : 'none';
+    }
     
     // Update modal title
     document.getElementById('modalTitle').textContent = 'Edit Task';
