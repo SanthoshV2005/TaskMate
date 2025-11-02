@@ -2,12 +2,8 @@
   "name": "taskmate-frontend",
   "version": "1.0.0",
   "description": "TaskMate Frontend - Smart Task Management System",
-  "main": "index.html",
-  "scripts": {
-    "build": "echo 'No build needed - static files'",
-    "start": "echo 'Static site - no server needed'"
-  },
-  "keywords": ["task-management", "web-technology"],
-  "author": "Santhosh",
+  "scripts": {},
+  "keywords": ["taskmate", "task-management"],
+  "author": "SanthoshV2005",
   "license": "MIT"
 }
